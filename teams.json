@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "description": "Sample attack/defense multipliers. 1.0 = average team.",
+    "avg_attack": 1.0,
+    "avg_defense": 1.0
+  },
+  "teams": {
+    "Paris_SG": {"attack": 1.50, "defense": 1.20},
+    "Real_Madrid": {"attack": 1.45, "defense": 1.25},
+    "Manchester_City": {"attack": 1.55, "defense": 1.30},
+    "Bayern": {"attack": 1.50, "defense": 1.35},
+    "Barcelona": {"attack": 1.40, "defense": 1.20},
+    "Liverpool": {"attack": 1.35, "defense": 1.10},
+    "Default": {"attack": 1.0, "defense": 1.0}
+  }
+}
