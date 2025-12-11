@@ -66,5 +66,5 @@ def predict_match(home, away, teams=None, meta=None, max_goals=6):
     }
 
 if __name__ == '__main__':
-    teams, meta = load_teams()
+    teams, meta = load_teams(
     print(predict_match('Paris_SG', 'Real_Madrid', teams, meta))
