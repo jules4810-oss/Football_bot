@@ -1,70 +1,53 @@
-import os
 import json
-import numpy as np
-from scipy.stats import poisson
+import telebot
+from prediction import load_teams, predict_match
 
-BASE_AVG_GOALS = 1.35  # baseline expected goals per team
-HOME_ADV = 1.12        # home advantage multiplier
+# Charger token
+with open('config.json', 'r') as f:
+    cfg = json.load(f)
 
-def load_teams(path=None):
-    if path is None:
-        path = os.path.join(os.path.dirname(__file__), 'teams.json')
-    with open(path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    return data.get('teams', {}), data.get('meta', {})
+TOKEN = cfg.get('TELEGRAM_TOKEN', '').strip()
+if not TOKEN:
+    print("ERROR: TELEGRAM_TOKEN not set in config.json.")
+    raise SystemExit(1)
 
-def get_team_rating(team_name, teams, default_key='Default'):
-    # accept variants with spaces/underscores, case-insensitive
-    key_variants = [team_name, team_name.replace(' ', '_'), team_name.replace('_', ' ')]
-    for k in key_variants:
-        if k in teams:
-            return teams[k]
-    for k in teams:
-        if k.lower() == team_name.lower():
-            return teams[k]
-    return teams.get(default_key, {"attack":1.0, "defense":1.0})
+bot = telebot.TeleBot(TOKEN)
+teams, meta = load_teams()
 
-def expected_goals(home, away, teams, meta=None):
-    home_r = get_team_rating(home, teams)
-    away_r = get_team_rating(away, teams)
-    avg_attack = meta.get('avg_attack', 1.0) if meta else 1.0
-    avg_defense = meta.get('avg_defense', 1.0) if meta else 1.0
+# Commande start/help
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    text = (
+        "Salut! Je suis ton bot de prédiction ⚽\n\n"
+        "Commandes:\n"
+        "/predict home_team away_team - prédiction d'un match\n"
+        "/example - exemple d'utilisation\n"
+    )
+    bot.reply_to(message, text)
 
-    exp_home = BASE_AVG_GOALS * (home_r.get('attack',1.0)/avg_attack) * (away_r.get('defense',1.0)/avg_defense) * HOME_ADV
-    exp_away = BASE_AVG_GOALS * (away_r.get('attack',1.0)/avg_attack) * (home_r.get('defense',1.0)/avg_defense)
-    exp_home = max(0.05, exp_home)
-    exp_away = max(0.05, exp_away)
-    return exp_home, exp_away
+# Exemple
+@bot.message_handler(commands=['example'])
+def example(message):
+    bot.reply_to(message, "Exemple: /predict Paris_SG Real_Madrid")
 
-def score_distribution(lambda_home, lambda_away, max_goals=6):
-    probs = np.zeros((max_goals+1, max_goals+1))
-    for i in range(max_goals+1):
-        for j in range(max_goals+1):
-            probs[i, j] = poisson.pmf(i, lambda_home) * poisson.pmf(j, lambda_away)
-    total = probs.sum()
-    if total > 0 and total < 0.9999:
-        probs = probs / total
-    return probs
+# Prédiction
+@bot.message_handler(commands=['predict'])
+def predict_cmd(message):
+    args = message.text.split()[1:]
+    if len(args) < 2:
+        bot.reply_to(message, "Usage: /predict home_team away_team")
+        return
+    home, away = args[0], args[1]
+    result = predict_match(home, away, teams, meta)
+    text = (
+        f"Match: {home} vs {away}\n"
+        f"Expected goals: {result['expected_goals']}\n"
+        f"Most likely score: {result['most_likely_score']}\n"
+        f"Outcome probabilities: {result['outcome_probabilities']}"
+    )
+    bot.reply_to(message, text)
 
-def predict_match(home, away, teams=None, meta=None, max_goals=6):
-    if teams is None:
-        teams, meta = load_teams()
-    lambda_home, lambda_away = expected_goals(home, away, teams, meta)
-    probs = score_distribution(lambda_home, lambda_away, max_goals=max_goals)
-    hi, hj = np.unravel_index(np.argmax(probs), probs.shape)
-    most_probable = {"home_goals": int(hi), "away_goals": int(hj), "probability": float(probs[hi, hj])}
-    home_win = float(np.tril(probs, -1).sum())
-    draw = float(np.diag(probs).sum())
-    away_win = float(np.triu(probs, 1).sum())
-    return {
-        "home": home,
-        "away": away,
-        "expected_goals": {"home": float(lambda_home), "away": float(lambda_away)},
-        "most_likely_score": most_probable,
-        "outcome_probabilities": {"home_win": home_win, "draw": draw, "away_win": away_win},
-        "score_matrix": probs.tolist()
-    }
-
+# Lancer le bot
 if __name__ == '__main__':
-    teams, meta = load_teams()
-    print(predict_match('Paris_SG', 'Real_Madrid', teams, meta))
+    print("Bot Telegram démarré. Polling...")
+    bot.infinity_polling(timeout=60, long_polling_timeout=60)
