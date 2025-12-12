@@ -1,0 +1,48 @@
+import json
+import telebot
+from prediction import load_teams, predict_match
+
+with open('config.json', 'r') as f:
+    cfg = json.load(f)
+
+TOKEN = cfg.get("8299127138:AAFBbqaVCl4DpntgOQxqKNAiC5g0-zVBApc", "").strip()
+if not TOKEN:
+    print("ERROR: TELEGRAM_TOKEN not set in config.json.")
+    raise SystemExit(1)
+
+bot = telebot.TeleBot(TOKEN)
+teams, meta = load_teams()
+
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    text = (
+        "Salut! Je suis ton bot de prédiction ⚽\n\n"
+        "Commandes:\n"
+        "/predict home_team away_team - prédiction d'un match\n"
+        "/example - exemple d'utilisation"
+    )
+    bot.reply_to(message, text)
+
+@bot.message_handler(commands=['example'])
+def example(message):
+    bot.reply_to(message, "Exemple: /predict Paris_SG Real_Madrid")
+
+@bot.message_handler(commands=['predict'])
+def predict_cmd(message):
+    args = message.text.split()[1:]
+    if len(args) < 2:
+        bot.reply_to(message, "Usage: /predict home_team away_team")
+        return
+    home, away = args[0], args[1]
+    result = predict_match(home, away, teams, meta)
+    text = (
+        f"Match: {home} vs {away}\n"
+        f"Expected goals: {result['expected_goals']}\n"
+        f"Most likely score: {result['most_likely_score']}\n"
+        f"Outcome probabilities: {result['outcome_probabilities']}"
+    )
+    bot.reply_to(message, text)
+
+if __name__ == '__main__':
+    print("Bot Telegram démarré. Polling...")
+    bot.infinity_polling(timeout=60, long_polling_timeout=60)
